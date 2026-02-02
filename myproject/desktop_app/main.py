@@ -189,9 +189,41 @@ class MainWindow(QMainWindow):
         self.summary = None
         self.equipment_data = []
         self.history = []
+        # Keep strong refs to QThreads so they aren't GC'd mid-run
+        self._threads = set()
         
         self.init_ui()
         self.show_login()
+
+    def _cleanup_thread(self, thread: QThread):
+        self._threads.discard(thread)
+        thread.deleteLater()
+
+    def _run_thread(self, thread: QThread, on_success=None):
+        """
+        Start a thread and ensure it stays alive until it finishes.
+        Also ensures cleanup happens after success/error handling.
+        """
+        self._threads.add(thread)
+
+        if on_success is not None:
+            def _handle_success(data, t=thread):
+                try:
+                    on_success(data)
+                finally:
+                    self._cleanup_thread(t)
+            thread.finished.connect(_handle_success)
+        else:
+            thread.finished.connect(lambda _data, t=thread: self._cleanup_thread(t))
+
+        def _handle_error(message, t=thread):
+            try:
+                self.show_error(message)
+            finally:
+                self._cleanup_thread(t)
+        thread.error.connect(_handle_error)
+
+        thread.start()
     
     def init_ui(self):
         self.setWindowTitle('Chemical Equipment Parameter Visualizer')
@@ -289,14 +321,14 @@ class MainWindow(QMainWindow):
     
     def upload_file(self, file_path):
         headers = {'Authorization': f'Token {self.token}'}
-        
+
+        # Read bytes here so the file isn't closed before the background thread uses it
         with open(file_path, 'rb') as f:
-            files = {'file': (os.path.basename(file_path), f, 'text/csv')}
-            
-            thread = ApiThread('POST', f'{API_BASE_URL}/upload/', headers=headers, files=files)
-            thread.finished.connect(self.on_upload_success)
-            thread.error.connect(self.show_error)
-            thread.start()
+            content = f.read()
+        files = {'file': (os.path.basename(file_path), content, 'text/csv')}
+
+        thread = ApiThread('POST', f'{API_BASE_URL}/upload/', headers=headers, files=files)
+        self._run_thread(thread, on_success=self.on_upload_success)
     
     def on_upload_success(self, data):
         self.current_dataset_id = data.get('dataset_id')
@@ -308,9 +340,7 @@ class MainWindow(QMainWindow):
     def load_history(self):
         headers = {'Authorization': f'Token {self.token}'}
         thread = ApiThread('GET', f'{API_BASE_URL}/history/', headers=headers)
-        thread.finished.connect(self.on_history_loaded)
-        thread.error.connect(self.show_error)
-        thread.start()
+        self._run_thread(thread, on_success=self.on_history_loaded)
     
     def on_history_loaded(self, data):
         self.history = data.get('history', [])
@@ -330,15 +360,11 @@ class MainWindow(QMainWindow):
         
         # Load summary
         thread1 = ApiThread('GET', f'{API_BASE_URL}/summary/{dataset_id}/', headers=headers)
-        thread1.finished.connect(self.on_summary_loaded)
-        thread1.error.connect(self.show_error)
-        thread1.start()
+        self._run_thread(thread1, on_success=self.on_summary_loaded)
         
         # Load equipment data
         thread2 = ApiThread('GET', f'{API_BASE_URL}/data/{dataset_id}/', headers=headers)
-        thread2.finished.connect(self.on_data_loaded)
-        thread2.error.connect(self.show_error)
-        thread2.start()
+        self._run_thread(thread2, on_success=self.on_data_loaded)
     
     def on_summary_loaded(self, data):
         self.summary = data
