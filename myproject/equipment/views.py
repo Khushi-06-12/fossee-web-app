@@ -1,14 +1,11 @@
 import pandas as pd
-import json
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Avg
 from .models import Dataset, Equipment
-from django.utils import timezone
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -20,17 +17,14 @@ import io
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_csv(request):
-    """Upload CSV file and parse equipment data"""
     if 'file' not in request.FILES:
         return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
     
     csv_file = request.FILES['file']
     
     try:
-        # Read CSV file
         df = pd.read_csv(csv_file)
         
-        # Validate required columns
         required_columns = ['Equipment Name', 'Type', 'Flowrate', 'Pressure', 'Temperature']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
@@ -38,11 +32,9 @@ def upload_csv(request):
                 'error': f'Missing required columns: {", ".join(missing_columns)}'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Create dataset
         dataset_name = csv_file.name
         dataset = Dataset.objects.create(name=dataset_name)
         
-        # Store equipment data
         equipment_list = []
         for _, row in df.iterrows():
             equipment = Equipment.objects.create(
@@ -62,7 +54,6 @@ def upload_csv(request):
                 'temperature': equipment.temperature
             })
         
-        # Keep only last 5 datasets
         datasets = Dataset.objects.all().order_by('-uploaded_at')
         if datasets.count() > 5:
             for ds in datasets[5:]:
@@ -86,7 +77,6 @@ def upload_csv(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_summary(request, dataset_id):
-    """Get summary statistics for a dataset"""
     try:
         dataset = Dataset.objects.get(id=dataset_id)
         equipment_list = Equipment.objects.filter(dataset=dataset)
@@ -94,13 +84,11 @@ def get_summary(request, dataset_id):
         if not equipment_list.exists():
             return Response({'error': 'No equipment data found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Calculate statistics
         total_count = equipment_list.count()
         avg_flowrate = equipment_list.aggregate(Avg('flowrate'))['flowrate__avg']
         avg_pressure = equipment_list.aggregate(Avg('pressure'))['pressure__avg']
         avg_temperature = equipment_list.aggregate(Avg('temperature'))['temperature__avg']
         
-        # Equipment type distribution
         type_distribution = {}
         for equipment in equipment_list:
             eq_type = equipment.equipment_type
@@ -130,7 +118,6 @@ def get_summary(request, dataset_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_history(request):
-    """Get last 5 uploaded datasets"""
     datasets = Dataset.objects.all().order_by('-uploaded_at')[:5]
     
     history = []
@@ -149,7 +136,6 @@ def get_history(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_equipment_data(request, dataset_id):
-    """Get all equipment data for a dataset"""
     try:
         dataset = Dataset.objects.get(id=dataset_id)
         equipment_list = Equipment.objects.filter(dataset=dataset)
@@ -174,7 +160,6 @@ def get_equipment_data(request, dataset_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def generate_pdf(request, dataset_id):
-    """Generate PDF report for a dataset"""
     try:
         dataset = Dataset.objects.get(id=dataset_id)
         equipment_list = Equipment.objects.filter(dataset=dataset)
@@ -182,30 +167,25 @@ def generate_pdf(request, dataset_id):
         if not equipment_list.exists():
             return Response({'error': 'No equipment data found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Calculate statistics
         total_count = equipment_list.count()
         avg_flowrate = equipment_list.aggregate(Avg('flowrate'))['flowrate__avg']
         avg_pressure = equipment_list.aggregate(Avg('pressure'))['pressure__avg']
         avg_temperature = equipment_list.aggregate(Avg('temperature'))['temperature__avg']
         
-        # Equipment type distribution
         type_distribution = {}
         for equipment in equipment_list:
             eq_type = equipment.equipment_type
             type_distribution[eq_type] = type_distribution.get(eq_type, 0) + 1
         
-        # Create PDF
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         story = []
         styles = getSampleStyleSheet()
         
-        # Title
         title = Paragraph(f"Equipment Analysis Report: {dataset.name}", styles['Title'])
         story.append(title)
         story.append(Spacer(1, 0.3*inch))
         
-        # Summary section
         story.append(Paragraph("Summary Statistics", styles['Heading2']))
         summary_data = [
             ['Metric', 'Value'],
@@ -228,7 +208,6 @@ def generate_pdf(request, dataset_id):
         story.append(summary_table)
         story.append(Spacer(1, 0.3*inch))
         
-        # Type distribution
         story.append(Paragraph("Equipment Type Distribution", styles['Heading2']))
         type_data = [['Equipment Type', 'Count']]
         for eq_type, count in type_distribution.items():
@@ -248,10 +227,9 @@ def generate_pdf(request, dataset_id):
         story.append(type_table)
         story.append(Spacer(1, 0.3*inch))
         
-        # Equipment details table
         story.append(Paragraph("Equipment Details", styles['Heading2']))
         equipment_data = [['Name', 'Type', 'Flowrate', 'Pressure', 'Temperature']]
-        for equipment in equipment_list[:50]:  # Limit to 50 rows for PDF
+        for equipment in equipment_list[:50]:
             equipment_data.append([
                 equipment.equipment_name,
                 equipment.equipment_type,

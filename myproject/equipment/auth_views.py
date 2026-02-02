@@ -10,7 +10,6 @@ from django.contrib.auth.models import User
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
-    """Login and get authentication token"""
     username = request.data.get('username')
     password = request.data.get('password')
     
@@ -37,7 +36,6 @@ def login(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
-    """Register a new user"""
     username = request.data.get('username')
     password = request.data.get('password')
     email = request.data.get('email', '')

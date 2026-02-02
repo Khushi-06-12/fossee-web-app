@@ -37,14 +37,11 @@ function Dashboard({ token, username, onLogout }) {
   const loadDataset = async (datasetId) => {
     setLoading(true);
     try {
-      // Fetch summary
       const summaryResponse = await axios.get(
         `${API_BASE_URL}/summary/${datasetId}/`,
         { headers: { 'Authorization': `Token ${token}` } }
       );
       setSummary(summaryResponse.data);
-
-      // Fetch equipment data
       const dataResponse = await axios.get(
         `${API_BASE_URL}/data/${datasetId}/`,
         { headers: { 'Authorization': `Token ${token}` } }

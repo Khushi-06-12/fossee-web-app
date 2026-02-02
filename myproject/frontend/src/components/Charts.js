@@ -28,7 +28,6 @@ ChartJS.register(
 function Charts({ summary, equipmentData }) {
   if (!summary || !equipmentData) return null;
 
-  // Type Distribution Pie Chart
   const typeDistributionData = {
     labels: Object.keys(summary.summary.type_distribution),
     datasets: [
@@ -56,7 +55,6 @@ function Charts({ summary, equipmentData }) {
     ],
   };
 
-  // Averages Bar Chart
   const averagesData = {
     labels: ['Flowrate', 'Pressure', 'Temperature'],
     datasets: [
@@ -74,7 +72,6 @@ function Charts({ summary, equipmentData }) {
     ],
   };
 
-  // Flowrate vs Pressure Line Chart
   const flowratePressureData = {
     labels: equipmentData.slice(0, 20).map((item, index) => `Equipment ${index + 1}`),
     datasets: [

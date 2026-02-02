@@ -18,5 +18,3 @@ class Equipment(models.Model):
 
     def __str__(self):
         return self.equipment_name
-
-# Create your models here.

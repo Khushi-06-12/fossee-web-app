@@ -7,12 +7,10 @@ from PyQt5.QtWidgets import (
     QMessageBox, QLineEdit, QDialog, QDialogButtonBox, QFormLayout,
     QGroupBox, QListWidget
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QFont
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-import json
 
 
 API_BASE_URL = 'http://localhost:8000/api/equipment'
@@ -189,7 +187,6 @@ class MainWindow(QMainWindow):
         self.summary = None
         self.equipment_data = []
         self.history = []
-        # Keep strong refs to QThreads so they aren't GC'd mid-run
         self._threads = set()
         
         self.init_ui()
@@ -200,10 +197,6 @@ class MainWindow(QMainWindow):
         thread.deleteLater()
 
     def _run_thread(self, thread: QThread, on_success=None):
-        """
-        Start a thread and ensure it stays alive until it finishes.
-        Also ensures cleanup happens after success/error handling.
-        """
         self._threads.add(thread)
 
         if on_success is not None:
@@ -235,7 +228,6 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         
-        # Header
         header_layout = QHBoxLayout()
         self.title_label = QLabel('Chemical Equipment Parameter Visualizer')
         self.title_label.setFont(QFont('Arial', 16, QFont.Bold))
@@ -246,7 +238,6 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.logout_button)
         main_layout.addLayout(header_layout)
         
-        # Upload section
         upload_group = QGroupBox('Upload CSV File')
         upload_layout = QVBoxLayout()
         self.upload_button = QPushButton('Select CSV File')
@@ -257,7 +248,6 @@ class MainWindow(QMainWindow):
         upload_group.setLayout(upload_layout)
         main_layout.addWidget(upload_group)
         
-        # History section
         history_group = QGroupBox('Upload History (Click to load)')
         history_layout = QVBoxLayout()
         self.history_list = QListWidget()
@@ -267,7 +257,6 @@ class MainWindow(QMainWindow):
         history_group.setLayout(history_layout)
         main_layout.addWidget(history_group)
         
-        # Summary section
         summary_group = QGroupBox('Summary Statistics')
         summary_layout = QVBoxLayout()
         self.summary_label = QLabel('No data loaded')
@@ -278,7 +267,6 @@ class MainWindow(QMainWindow):
         summary_group.setLayout(summary_layout)
         main_layout.addWidget(summary_group)
         
-        # Charts section
         charts_group = QGroupBox('Visualizations')
         charts_layout = QHBoxLayout()
         
@@ -293,7 +281,6 @@ class MainWindow(QMainWindow):
         charts_group.setLayout(charts_layout)
         main_layout.addWidget(charts_group)
         
-        # Table section
         table_group = QGroupBox('Equipment Data')
         table_layout = QVBoxLayout()
         self.table = QTableWidget()
@@ -321,8 +308,6 @@ class MainWindow(QMainWindow):
     
     def upload_file(self, file_path):
         headers = {'Authorization': f'Token {self.token}'}
-
-        # Read bytes here so the file isn't closed before the background thread uses it
         with open(file_path, 'rb') as f:
             content = f.read()
         files = {'file': (os.path.basename(file_path), content, 'text/csv')}
@@ -357,12 +342,8 @@ class MainWindow(QMainWindow):
     
     def load_dataset(self, dataset_id):
         headers = {'Authorization': f'Token {self.token}'}
-        
-        # Load summary
         thread1 = ApiThread('GET', f'{API_BASE_URL}/summary/{dataset_id}/', headers=headers)
         self._run_thread(thread1, on_success=self.on_summary_loaded)
-        
-        # Load equipment data
         thread2 = ApiThread('GET', f'{API_BASE_URL}/data/{dataset_id}/', headers=headers)
         self._run_thread(thread2, on_success=self.on_data_loaded)
     
@@ -375,8 +356,6 @@ Average Pressure: {data['summary']['averages']['pressure']}
 Average Temperature: {data['summary']['averages']['temperature']}
         """
         self.summary_label.setText(summary_text.strip())
-        
-        # Update charts
         if self.summary:
             self.chart1.plot_type_distribution(self.summary['summary']['type_distribution'])
             self.chart2.plot_averages(self.summary['summary']['averages'])
@@ -384,8 +363,6 @@ Average Temperature: {data['summary']['averages']['temperature']}
     def on_data_loaded(self, data):
         self.equipment_data = data.get('data', [])
         self.update_table()
-        
-        # Update flowrate vs pressure chart
         if self.equipment_data:
             self.chart3.plot_flowrate_pressure(self.equipment_data)
     
